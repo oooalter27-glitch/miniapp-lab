@@ -2,5 +2,8 @@ node_modules/
 .next/
 .env.local
 *.log
-projects/*/node_modules/
-projects/*/.next/
+
+# Проекты в репозитории песочницы не хранятся: у каждого мини-аппа своя
+# жизнь и свой git. Здесь лежат только шаблон, скрипты и инструкции.
+projects/*
+!projects/.gitkeep
