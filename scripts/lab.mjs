@@ -30,10 +30,18 @@ function run(command, args, opts = {}) {
 function ensureDeps(dir) {
   if (existsSync(join(dir, "node_modules"))) return;
   console.log("→ ставлю зависимости (первый запуск)");
-  // Кэш в стороне: домашний каталог бывает только для чтения, и тогда npm
-  // падает с EROFS на ровном месте.
-  const r = run("npm", ["install", "--cache", join(LAB, ".npm-cache"), "--silent"], { cwd: dir });
-  if (r.status !== 0) die("npm install не прошёл");
+  // Без --silent: когда установка падает, причина нужна на экране. Молчаливое
+  // «npm install не прошёл» отправляет человека гадать — сеть, права, прокси.
+  // Кэш держим внутри песочницы: домашний каталог бывает только для чтения,
+  // и тогда npm падает с EROFS на ровном месте.
+  const r = run("npm", ["install", "--cache", join(LAB, ".npm-cache")], { cwd: dir });
+  if (r.status !== 0) {
+    die(
+      "\nnpm install не прошёл — причина в выводе выше.\n" +
+      "Частое: нет доступа к registry.npmjs.org (прокси/VPN), либо папка занята антивирусом.\n" +
+      `Попробуйте руками: cd "${dir}" && npm install`,
+    );
+  }
 }
 
 function cmdNew() {
