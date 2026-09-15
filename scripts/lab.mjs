@@ -13,6 +13,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,8 +28,24 @@ function run(command, args, opts = {}) {
   return spawnSync(command, args, { stdio: "inherit", shell: true, ...opts });
 }
 
+/**
+ * Установлены ли зависимости по-настоящему.
+ *
+ * Наличия папки node_modules мало: оборванная установка оставляет её на месте,
+ * но без node_modules/.bin — и тогда `tsc` с `next` просто не находятся, а
+ * повторный npm install считает, что всё уже стоит, и ничего не чинит.
+ */
+function depsReady(dir) {
+  return existsSync(join(dir, "node_modules", ".bin", "next"))
+    || existsSync(join(dir, "node_modules", ".bin", "next.cmd")); // Windows
+}
+
 function ensureDeps(dir) {
-  if (existsSync(join(dir, "node_modules"))) return;
+  if (depsReady(dir)) return;
+  if (existsSync(join(dir, "node_modules"))) {
+    console.log("→ прошлая установка оборвалась, ставлю заново");
+    rmSync(join(dir, "node_modules"), { recursive: true, force: true });
+  }
   console.log("→ ставлю зависимости (первый запуск)");
   // Без --silent: когда установка падает, причина нужна на экране. Молчаливое
   // «npm install не прошёл» отправляет человека гадать — сеть, права, прокси.
@@ -37,12 +54,28 @@ function ensureDeps(dir) {
   // (обход read-only домашнего каталога), и он утащил в репозиторий 186 МБ
   // мусора, после чего `git pull` стал ругаться на «локальные изменения».
   // Кому нужен свой кэш — задаёт npm_config_cache в окружении.
-  const r = run("npm", ["install"], { cwd: dir });
+  let r = run("npm", ["install"], { cwd: dir });
+
+  if (r.status !== 0) {
+    // Вторая попытка с кэшем во временной папке: на части машин системный
+    // кэш недоступен на запись, и npm падает с EROFS/EACCES, хотя сеть и
+    // права на сам проект в порядке. Временная папка — не репозиторий:
+    // кэш внутри песочницы однажды уехал в git и сломал pull всем.
+    const tmpCache = join(tmpdir(), "miniapp-lab-npm-cache");
+    console.log(`\n→ повторяю установку с запасным кэшем: ${tmpCache}`);
+    // Сносим то, что успела наложить неудачная попытка. Без этого npm считает
+    // пакеты уже стоящими и не пересоздаёт node_modules/.bin — установка
+    // «проходит», а потом tsc не находится.
+    rmSync(join(dir, "node_modules"), { recursive: true, force: true });
+    r = run("npm", ["install", "--cache", tmpCache], { cwd: dir });
+  }
+
   if (r.status !== 0) {
     die(
       "\nnpm install не прошёл — причина в выводе выше.\n" +
       "Частое: нет доступа к registry.npmjs.org (прокси/VPN), либо папка занята антивирусом.\n" +
-      `Попробуйте руками: cd "${dir}" && npm install`,
+      `Проверить сеть: npm ping\n` +
+      `Попробовать руками: cd "${dir}" && npm install`,
     );
   }
 }
@@ -83,7 +116,10 @@ function cmdCheck() {
   ensureDeps(dir);
 
   console.log("→ типы");
-  if (run("npx", ["tsc", "--noEmit"], { cwd: dir }).status !== 0) {
+  // Через npm-скрипт, а не npx: npx при отсутствии бинаря в node_modules/.bin
+  // молча уходит в реестр за пакетом «tsc» (это вообще другой пакет) и падает
+  // сетевой ошибкой, выдавая её за ошибку типов.
+  if (run("npm", ["run", "typecheck"], { cwd: dir }).status !== 0) {
     die("\nКРАСНО: типы не сходятся. Чините и гоните снова.");
   }
 
