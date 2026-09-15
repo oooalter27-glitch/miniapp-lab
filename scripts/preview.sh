@@ -14,16 +14,26 @@ PORT="${2:-3400}"
 DIR="$LAB/projects/$NAME"
 [[ -d "$DIR" ]] || { echo "Нет проекта «$NAME»" >&2; exit 1; }
 
+PIDFILE="/tmp/preview-$NAME.pid"
+
+# «stop» приходит на месте порта, поэтому разбираем его ПЕРВЫМ. Иначе он
+# доезжает до проверки «уже поднят» и печатает http://localhost:stop.
+if [[ "${2:-}" == "stop" ]]; then
+  if [[ -f "$PIDFILE" ]] && kill "$(cat "$PIDFILE")" 2>/dev/null; then
+    rm -f "$PIDFILE"
+    echo "Остановлен."
+  else
+    rm -f "$PIDFILE"
+    echo "Не был запущен."
+  fi
+  exit 0
+fi
+
 cd "$DIR"
 [[ -d node_modules ]] || npm install --cache /tmp/npmcache --silent
 
-PIDFILE="/tmp/preview-$NAME.pid"
 if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   echo "Уже поднят: http://localhost:$PORT (остановить: scripts/preview.sh $NAME stop)"
-  exit 0
-fi
-if [[ "${2:-}" == "stop" ]]; then
-  [[ -f "$PIDFILE" ]] && kill "$(cat "$PIDFILE")" 2>/dev/null && rm -f "$PIDFILE" && echo "Остановлен."
   exit 0
 fi
 
