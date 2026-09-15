@@ -10,13 +10,16 @@ set -euo pipefail
 LAB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAME="${1:-}"
 PORT="${2:-}"
-HOST="${DEPLOY_HOST:-2.26.1.72}"
+# Адрес сервера и ключ берём из окружения, а не из кода: репозиторий может
+# уехать куда угодно, а прод-адрес светить в нём незачем.
+HOST="${DEPLOY_HOST:-}"
 USER="${DEPLOY_USER:-root}"
 KEY="${TIMEWEB_SSH_KEY_PATH:-}"
 REMOTE_DIR="/opt/miniapps/$NAME"
 
 [[ -z "$NAME" ]] && { echo "Укажите имя: scripts/deploy.sh my-app 3410" >&2; exit 1; }
 [[ -z "$KEY" ]] && { echo "Нет TIMEWEB_SSH_KEY_PATH — ключа для сервера" >&2; exit 1; }
+[[ -z "$HOST" ]] && { echo "Нет DEPLOY_HOST — адреса сервера. Задайте: export DEPLOY_HOST=<адрес>" >&2; exit 1; }
 DIR="$LAB/projects/$NAME"
 [[ -d "$DIR" ]] || { echo "Нет проекта «$NAME»" >&2; exit 1; }
 
