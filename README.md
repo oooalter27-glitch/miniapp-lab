@@ -31,12 +31,18 @@ codex
 
 ## Команды
 
+Везде — Windows, macOS, Linux:
+
 ```bash
-scripts/new.sh my-app          # создать проект из шаблона
-scripts/check.sh my-app        # типы + сборка (без зелёного — работа не сделана)
-scripts/preview.sh my-app      # поднять и открыть
-scripts/preview.sh my-app stop # остановить
-scripts/deploy.sh my-app       # выкатить на сервер (только по вашей команде)
+node scripts/lab.mjs new my-app        # создать проект из шаблона
+node scripts/lab.mjs check my-app      # типы + сборка (без зелёного — работа не сделана)
+node scripts/lab.mjs preview my-app    # поднять и открыть (Ctrl+C — стоп)
+```
+
+Только Linux/macOS — те же действия на bash плюс выкат:
+
+```bash
+scripts/deploy.sh my-app               # выкатить на сервер (по вашей команде)
 ```
 
 ## Что уже работает из коробки
