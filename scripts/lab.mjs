@@ -23,9 +23,22 @@ const [, , cmd, name, arg3] = process.argv;
 const die = (msg) => { console.error(msg); process.exit(1); };
 const projectDir = (n) => join(LAB, "projects", n);
 
-/** npm через shell: на Windows это npm.cmd, и без shell:true spawn его не находит. */
+const IS_WIN = process.platform === "win32";
+
+/**
+ * Запуск npm/npx. На Windows это .cmd-обёртки, их spawn не находит по голому
+ * имени — поэтому дописываем расширение сами, а не включаем shell.
+ *
+ * Через shell было бы короче, но тогда аргументы склеиваются в строку без
+ * экранирования: путь вида «C:\...\Риелторский миниап» с пробелом ломается,
+ * а Node 24 отдельно предупреждает об этом как о дыре (DEP0190).
+ */
+function bin(command) {
+  return IS_WIN && !command.endsWith(".cmd") ? `${command}.cmd` : command;
+}
+
 function run(command, args, opts = {}) {
-  return spawnSync(command, args, { stdio: "inherit", shell: true, ...opts });
+  return spawnSync(bin(command), args, { stdio: "inherit", ...opts });
 }
 
 /**
@@ -146,7 +159,7 @@ function cmdPreview() {
 
   // Держим в текущем терминале: так человек сразу видит ошибки сборки,
   // а не ищет их в файле лога.
-  const child = spawn("npx", ["next", "dev", "-p", port], { cwd: dir, stdio: "inherit", shell: true });
+  const child = spawn(bin("npx"), ["next", "dev", "-p", port], { cwd: dir, stdio: "inherit" });
   child.on("exit", (code) => process.exit(code ?? 0));
 }
 
