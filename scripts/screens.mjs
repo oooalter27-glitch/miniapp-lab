@@ -86,11 +86,20 @@ function lint(raw, file) {
   return problems;
 }
 
-async function apiPost(path, body) {
+/**
+ * projectId платформа читает из куки alter_active_project, а не из тела
+ * запроса: тот же механизм, что и у кабинета при переключении проекта.
+ * Поэтому адресуем экраны именно так, иначе они лягут в первый попавшийся.
+ */
+async function apiPost(path, body, projectId) {
   if (!TOKEN) die("Нет MINIAPP_ADMIN_TOKEN — ключ доступа к платформе.\n  Задайте его в окружении и повторите.");
   const res = await fetch(`${API}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${TOKEN}`,
+      ...(projectId ? { Cookie: `alter_active_project=${projectId}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -132,7 +141,86 @@ async function cmdCheck() {
   console.log(`\nДальше: node scripts/screens.mjs push ${name}`);
 }
 
-const commands = { new: cmdNew, check: cmdCheck };
+/**
+ * Превью: один файл, где экраны стоят рядом в рамке 375.
+ *
+ * Сервера здесь нет намеренно. Экран — статика, поэтому файл открывается
+ * напрямую и живёт сам по себе: не надо держать окно терминала и нечему
+ * упираться в запреты песочницы.
+ */
+function cmdPreview() {
+  if (!name) die("Укажите имя: node scripts/screens.mjs preview my-app");
+  const files = screenFiles(name);
+
+  const cards = files.map(({ file, path }) => `
+    <figure style="margin:0">
+      <figcaption style="font:13px/1.4 system-ui;color:#64748B;margin-bottom:8px">${file}</figcaption>
+      <div style="width:375px;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden">
+        ${readFileSync(path, "utf8")}
+      </div>
+    </figure>`).join("\n");
+
+  const out = join(appDir(name), "preview.html");
+  writeFileSync(out, `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>${name} — превью</title></head>
+<body style="margin:0;padding:24px;background:#F1F5F9;font-family:system-ui">
+<h1 style="font:600 18px/1.3 system-ui;margin:0 0 20px">${name}: ${files.length} экранов</h1>
+<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">${cards}</div>
+</body></html>\n`);
+
+  console.log(`Готово: ${out}`);
+  console.log("Откройте этот файл в браузере — двойным щелчком, ничего запускать не нужно.");
+}
+
+async function cmdPush() {
+  if (!name) die("Укажите имя: node scripts/screens.mjs push my-app");
+  const metaPath = join(appDir(name), "meta.json");
+  if (!existsSync(metaPath)) die(`Нет meta.json у «${name}»`);
+  const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+
+  if (!meta.projectId) {
+    die(`Не задан projectId в projects/${name}/meta.json.\n` +
+        "  Это проект в кабинете, куда лягут экраны. Возьмите его id и впишите.");
+  }
+
+  // Перед отправкой прогоняем ту же проверку: пуш кривых экранов означает
+  // ручную уборку в кабинете, а это дороже лишних трёх секунд ожидания.
+  const files = screenFiles(name);
+  let problems = [];
+  for (const { file, path } of files) problems = problems.concat(lint(readFileSync(path, "utf8"), file));
+  if (problems.length) {
+    console.error("КРАСНО: сначала почините разметку\n");
+    for (const p of problems) console.error("  · " + p);
+    process.exit(1);
+  }
+
+  const body = {
+    html: joinScreens(name),
+    name_prefix: meta.namePrefix || "Экран",
+    ...(meta.pageId ? { page_id: meta.pageId } : {}),
+  };
+  console.log(`→ отправляю ${files.length} экранов в проект ${meta.projectId}`);
+  const r = await apiPost("/api/screens/import-html", body, meta.projectId);
+  if (!r.ok) die(`КРАСНО: платформа отклонила (${r.status}): ${r.data?.error || "неизвестно"}`);
+
+  // Платформа возвращает созданные экраны в поле screens, ошибки — отдельно.
+  const created = r.data?.screens || [];
+  const failed = r.data?.errors || [];
+  console.log(`\nЗЕЛЕНО: в кабинете ${created.length} экранов\n`);
+  for (const c of created) console.log(`  · ${c.name}`);
+  if (failed.length) {
+    console.log(`\nНе легли (${failed.length}):`);
+    for (const e of failed) console.log(`  · экран ${e.index + 1}: ${e.error}`);
+  }
+  const q = r.data?.queued;
+  if (q && (q.icons || q.images)) {
+    console.log(`\nКартинки генерируются: иконок ${q.icons}, изображений ${q.images}.`);
+    console.log("В кабинете они появятся сами, когда будут готовы.");
+  }
+  console.log(`\nОткрыть: ${API}`);
+}
+
+const commands = { new: cmdNew, check: cmdCheck, preview: cmdPreview, push: cmdPush };
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
