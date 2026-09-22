@@ -186,6 +186,28 @@ async function apiPost(path, body, projectId) {
   return { ok: res.ok, status: res.status, data };
 }
 
+/** Проекты кабинета с их id — чтобы не искать в адресной строке. */
+async function cmdProjects() {
+  if (!CREDS.session && !CREDS.token) {
+    die("Вы не вошли.\n  Выполните один раз: node scripts/screens.mjs login почта пароль");
+  }
+  const res = await fetch(`${API}/api/projects`, {
+    headers: {
+      ...(CREDS.token ? { Authorization: `Bearer ${CREDS.token}` } : {}),
+      ...(CREDS.session ? { Cookie: `alter_session=${CREDS.session}` } : {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) die(`Не получилось (${res.status}): ${data?.error || "неизвестно"}`);
+
+  const list = Array.isArray(data) ? data : data.projects || data.items || [];
+  if (!list.length) die("В кабинете нет проектов — создайте хотя бы один.");
+
+  console.log("Проекты кабинета:\n");
+  for (const p of list) console.log(`  ${p.id}   ${p.name || p.slug || ""}`);
+  console.log("\nНужный id впишите в projects/<имя>/meta.json, поле projectId.");
+}
+
 /** Все экраны проекта одним HTML: парсер платформы читает section подряд. */
 function joinScreens(n) {
   return screenFiles(n).map(({ path }) => readFileSync(path, "utf8")).join("\n");
@@ -300,11 +322,12 @@ async function cmdPush() {
   console.log(`\nОткрыть: ${API}`);
 }
 
-const commands = { new: cmdNew, login: cmdLogin, check: cmdCheck, preview: cmdPreview, push: cmdPush };
+const commands = { login: cmdLogin, projects: cmdProjects, new: cmdNew, check: cmdCheck, preview: cmdPreview, push: cmdPush };
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
   node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
+  node scripts/screens.mjs projects        показать проекты кабинета
   node scripts/screens.mjs new <имя>       создать из шаблона
   node scripts/screens.mjs check <имя>     проверить экраны
   node scripts/screens.mjs preview <имя>   посмотреть в браузере

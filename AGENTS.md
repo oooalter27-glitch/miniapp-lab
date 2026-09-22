@@ -51,6 +51,7 @@
 ## Команды
 
     node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
+    node scripts/screens.mjs projects        показать проекты кабинета с их id
     node scripts/screens.mjs new <имя>       создать из шаблона
     node scripts/screens.mjs check <имя>     проверить (без зелёного работа не сделана)
     node scripts/screens.mjs preview <имя>   собрать preview.html
