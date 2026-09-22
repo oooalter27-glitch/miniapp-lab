@@ -1,16 +1,14 @@
-# Пересборка песочницы под формат билдера
+# Пересборка песочницы под формат билдера — ГОТОВО
 
-Цель: агент пишет сразу экраны-HTML по спеке импорта, а не Next-проект.
-Перенос в прод — две команды: check (проверка) → push (отправка в билдер).
+- [x] dry-режим в /api/screens/import-html (alter-miniapp, f1a4f97, на проде)
+- [x] template-screens/ — шаблон экранов + docs/SPEC.md рядом
+- [x] scripts/screens.mjs: new / check / preview / push
+- [x] AGENTS.md — агент пишет HTML по спеке
+- [x] README — новый цикл
+- [x] Прогон живьём: 2 экрана доехали в проект «Риелторские услуги»
 
-## Шаги
-- [x] dry-режим в /api/screens/import-html (репо alter-miniapp, коммит f1a4f97)
-- [ ] template-screens/ — новый шаблон: screens/*.html + meta.json
-- [ ] scripts/lab.mjs: new / check / preview / push под новый формат
-- [ ] AGENTS.md — агент пишет HTML по спеке
-- [ ] README — новый цикл работы
-- [ ] Прогон живьём: собрать экран → check → push в тестовый проект
-
-## Не трогаем
-- projects/* старые (proba, probe2-5, realty) — остаются как есть
-- template/ (Next) — оставляем для случаев, где нужна своя логика
+Осталось владельцу:
+- убрать тестовые экраны «Проба песочницы 1/2» из проекта «Риелторские услуги»
+- удалить локальную папку projects/demo-check (моя проба)
+- выдать MINIAPP_ADMIN_TOKEN на рабочую машину
+- влить ветку agent/screens-format
