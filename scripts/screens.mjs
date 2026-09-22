@@ -13,7 +13,7 @@
  * Поэтому нет сборки (нечему падать с spawn EPERM), превью открывается
  * файлом, а перенос в кабинет — это одна отправка на платформу.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,24 @@ function screenFiles(n) {
   return files.map((f) => ({ file: f, path: join(dir, f) }));
 }
 
+/**
+ * Копирование папки своими руками, файл за файлом.
+ *
+ * Встроенный cpSync на Windows падает с «EIO, Access is denied», когда в пути
+ * есть кириллица и пробелы: он уходит на длинный путь вида \\?\C:\… и спотыкается
+ * о него. Наш путь ровно такой — «…\МИНИАПП\Риелторский миниап\…».
+ * Обычные mkdir и copyFile этой беды не знают.
+ */
+function copyDir(src, dst) {
+  mkdirSync(dst, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const from = join(src, entry.name);
+    const to = join(dst, entry.name);
+    if (entry.isDirectory()) copyDir(from, to);
+    else copyFileSync(from, to);
+  }
+}
+
 function cmdNew() {
   if (!name) die("Укажите имя: node scripts/screens.mjs new my-app");
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
@@ -43,7 +61,7 @@ function cmdNew() {
   if (existsSync(dst)) die(`Проект «${name}» уже есть: ${dst}`);
 
   mkdirSync(join(LAB, "projects"), { recursive: true });
-  cpSync(join(LAB, "template-screens"), dst, { recursive: true });
+  copyDir(join(LAB, "template-screens"), dst);
 
   const metaPath = join(dst, "meta.json");
   const meta = JSON.parse(readFileSync(metaPath, "utf8"));
