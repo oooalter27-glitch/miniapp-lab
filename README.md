@@ -21,6 +21,7 @@
     node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
     node scripts/screens.mjs projects        показать проекты кабинета с их id
     node scripts/screens.mjs new <имя>       создать из шаблона
+    node scripts/screens.mjs use <имя> <id>  привязать к проекту кабинета
     node scripts/screens.mjs check <имя>     проверить экраны
     node scripts/screens.mjs preview <имя>   собрать preview.html
     node scripts/screens.mjs push <имя>      отправить в кабинет
@@ -29,8 +30,8 @@
 теми же почтой и паролем, что и в кабинет; сессия хранится в домашней папке,
 вне репозитория. Адрес по умолчанию — miniapp.alterda.ru, меняется `MINIAPP_URL`.
 
-Перед отправкой впишите `projectId` в `projects/<имя>/meta.json` — это проект
-в кабинете, куда лягут экраны. Узнать его: `node scripts/screens.mjs projects`.
+Перед отправкой привяжите проект кабинета: `projects` покажет список с id,
+`use <имя> <id>` пропишет нужный. Руками meta.json править не надо.
 
 ## Что внутри
 

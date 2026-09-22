@@ -208,6 +208,29 @@ async function cmdProjects() {
   console.log("\nНужный id впишите в projects/<имя>/meta.json, поле projectId.");
 }
 
+/**
+ * Привязать папку к проекту кабинета.
+ *
+ * Правка meta.json руками — лишний шаг, на котором легко ошибиться: id длинный,
+ * а ошибка тихая (экраны уедут не туда). Пусть подставляет команда.
+ */
+function cmdUse() {
+  const projectId = (process.argv[4] || "").trim();
+  if (!name || !projectId) {
+    die("Укажите проект: node scripts/screens.mjs use <имя> <id-проекта>\n" +
+        "  Список id: node scripts/screens.mjs projects");
+  }
+  const metaPath = join(appDir(name), "meta.json");
+  if (!existsSync(metaPath)) die(`Нет проекта «${name}» — сначала new`);
+
+  const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+  meta.projectId = projectId;
+  writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n");
+
+  console.log(`«${name}» теперь отправляется в проект ${projectId}`);
+  console.log(`\nДальше: node scripts/screens.mjs check ${name}`);
+}
+
 /** Все экраны проекта одним HTML: парсер платформы читает section подряд. */
 function joinScreens(n) {
   return screenFiles(n).map(({ path }) => readFileSync(path, "utf8")).join("\n");
@@ -322,13 +345,14 @@ async function cmdPush() {
   console.log(`\nОткрыть: ${API}`);
 }
 
-const commands = { login: cmdLogin, projects: cmdProjects, new: cmdNew, check: cmdCheck, preview: cmdPreview, push: cmdPush };
+const commands = { login: cmdLogin, projects: cmdProjects, new: cmdNew, use: cmdUse, check: cmdCheck, preview: cmdPreview, push: cmdPush };
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
   node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
   node scripts/screens.mjs projects        показать проекты кабинета
   node scripts/screens.mjs new <имя>       создать из шаблона
+  node scripts/screens.mjs use <имя> <id>  привязать к проекту кабинета
   node scripts/screens.mjs check <имя>     проверить экраны
   node scripts/screens.mjs preview <имя>   посмотреть в браузере
   node scripts/screens.mjs push <имя>      отправить в билдер`);
