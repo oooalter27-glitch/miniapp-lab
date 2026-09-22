@@ -1,0 +1,7 @@
+{
+  "name": "новый мини-апп",
+  "projectId": "",
+  "pageId": "",
+  "namePrefix": "Экран",
+  "note": "projectId и pageId берутся из кабинета miniapp.alterda.ru. Пустые — push спросит."
+}
