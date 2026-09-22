@@ -18,15 +18,15 @@
 
 ## Команды
 
-    node scripts/screens.mjs login <ключ>    разовый вход на платформу
+    node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
     node scripts/screens.mjs new <имя>       создать из шаблона
     node scripts/screens.mjs check <имя>     проверить экраны
     node scripts/screens.mjs preview <имя>   собрать preview.html
     node scripts/screens.mjs push <имя>      отправить в кабинет
 
-`check` и `push` ходят на платформу. Ключ вводится один раз командой `login`
-и хранится в домашней папке, вне репозитория. Адрес по умолчанию —
-miniapp.alterda.ru, меняется переменной `MINIAPP_URL`.
+`check` и `push` ходят на платформу. Вход — один раз командой `login`
+теми же почтой и паролем, что и в кабинет; сессия хранится в домашней папке,
+вне репозитория. Адрес по умолчанию — miniapp.alterda.ru, меняется `MINIAPP_URL`.
 
 Перед отправкой впишите `projectId` в `projects/<имя>/meta.json` — это проект
 в кабинете, куда лягут экраны.

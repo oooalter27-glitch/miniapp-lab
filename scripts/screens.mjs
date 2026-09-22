@@ -2,7 +2,7 @@
 /**
  * Песочница экранов — сборка мини-аппов сразу в формате нашего билдера.
  *
- *   node scripts/screens.mjs login <ключ>
+ *   node scripts/screens.mjs login <почта> <пароль>
  *   node scripts/screens.mjs new <имя>
  *   node scripts/screens.mjs check <имя>
  *   node scripts/screens.mjs preview <имя>
@@ -66,27 +66,49 @@ function cmdNew() {
 const API = (process.env.MINIAPP_URL || "https://miniapp.alterda.ru").replace(/\/+$/, "");
 const CRED_FILE = join(homedir(), ".miniapp-lab.json");
 
-function readToken() {
-  if (process.env.MINIAPP_ADMIN_TOKEN) return process.env.MINIAPP_ADMIN_TOKEN;
+function readCreds() {
+  if (process.env.MINIAPP_ADMIN_TOKEN) return { token: process.env.MINIAPP_ADMIN_TOKEN };
   try {
-    return JSON.parse(readFileSync(CRED_FILE, "utf8")).token || "";
+    return JSON.parse(readFileSync(CRED_FILE, "utf8"));
   } catch {
-    return "";
+    return {};
   }
 }
-const TOKEN = readToken();
+const CREDS = readCreds();
 
-/** Разовый вход: ключ вводится с клавиатуры и больше не спрашивается. */
-function cmdLogin() {
-  const value = (process.argv[3] || "").trim();
-  if (!value) {
-    console.log("Вставьте ключ платформы (ADMIN_TOKEN из настроек мини-аппа):\n");
-    console.log("  node scripts/screens.mjs login ВАШ_КЛЮЧ\n");
-    console.log(`Он ляжет в ${CRED_FILE} и в репозиторий не попадёт.`);
+/**
+ * Вход теми же логином и паролем, что и в кабинет.
+ *
+ * Изначально тут был ADMIN_TOKEN, но его неоткуда взять на рабочей машине:
+ * он лежит в настройках сервера, а пересылать боевой ключ в переписке нельзя.
+ * Логин и пароль человек и так знает, а сессия живёт ограниченное время и
+ * привязана к его учётной записи — если утечёт, ущерб несравним.
+ */
+async function cmdLogin() {
+  const email = (process.argv[3] || "").trim();
+  const password = (process.argv[4] || "").trim();
+  if (!email || !password) {
+    console.log("Вход теми же данными, что и в кабинет:\n");
+    console.log("  node scripts/screens.mjs login почта пароль\n");
+    console.log(`Сессия ляжет в ${CRED_FILE}, в репозиторий не попадёт.`);
     process.exit(1);
   }
-  writeFileSync(CRED_FILE, JSON.stringify({ token: value }, null, 2) + "\n", { mode: 0o600 });
-  console.log(`Ключ сохранён: ${CRED_FILE}`);
+
+  const res = await fetch(`${API}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) die(`Не вошли (${res.status}): ${data?.error || "проверьте почту и пароль"}`);
+
+  // Сессия приходит обычной кукой — вытаскиваем её значение и храним у себя.
+  const raw = res.headers.getSetCookie?.() || [res.headers.get("set-cookie") || ""];
+  const found = raw.map((c) => (c.match(/(?:^|;\s*)alter_session=([^;]+)/) || [])[1]).find(Boolean);
+  if (!found) die("Платформа не выдала сессию — сообщите об этом, это не ваша ошибка");
+
+  writeFileSync(CRED_FILE, JSON.stringify({ session: found, email }, null, 2) + "\n", { mode: 0o600 });
+  console.log(`Вошли как ${data?.email || email}. Сессия сохранена: ${CRED_FILE}`);
   console.log("Проверьте: node scripts/screens.mjs check <имя>");
 }
 
@@ -124,13 +146,21 @@ function lint(raw, file) {
  * Поэтому адресуем экраны именно так, иначе они лягут в первый попавшийся.
  */
 async function apiPost(path, body, projectId) {
-  if (!TOKEN) die("Нет ключа платформы.\n  Выполните один раз: node scripts/screens.mjs login ВАШ_КЛЮЧ");
+  if (!CREDS.session && !CREDS.token) {
+    die("Вы не вошли.\n  Выполните один раз: node scripts/screens.mjs login почта пароль");
+  }
+  // Сессия и выбранный проект едут одной кукой — так же, как из браузера.
+  const cookies = [
+    CREDS.session ? `alter_session=${CREDS.session}` : "",
+    projectId ? `alter_active_project=${projectId}` : "",
+  ].filter(Boolean).join("; ");
+
   const res = await fetch(`${API}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${TOKEN}`,
-      ...(projectId ? { Cookie: `alter_active_project=${projectId}` } : {}),
+      ...(CREDS.token ? { Authorization: `Bearer ${CREDS.token}` } : {}),
+      ...(cookies ? { Cookie: cookies } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -256,7 +286,7 @@ const commands = { new: cmdNew, login: cmdLogin, check: cmdCheck, preview: cmdPr
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
-  node scripts/screens.mjs login <ключ>    разовый вход на платформу
+  node scripts/screens.mjs login <почта> <пароль>   вход в кабинет
   node scripts/screens.mjs new <имя>       создать из шаблона
   node scripts/screens.mjs check <имя>     проверить экраны
   node scripts/screens.mjs preview <имя>   посмотреть в браузере
