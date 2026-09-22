@@ -50,13 +50,14 @@
 
 ## Команды
 
+    node scripts/screens.mjs login <ключ>    разовый вход на платформу
     node scripts/screens.mjs new <имя>       создать из шаблона
     node scripts/screens.mjs check <имя>     проверить (без зелёного работа не сделана)
     node scripts/screens.mjs preview <имя>   собрать preview.html
     node scripts/screens.mjs push <имя>      отправить экраны в кабинет
 
-`check` и `push` ходят на платформу и требуют ключ `MINIAPP_ADMIN_TOKEN`
-в окружении. Если его нет — так и скажи владельцу, не выдумывай обходных путей.
+`check` и `push` ходят на платформу. Ключ задаётся один раз командой `login`
+и лежит в домашней папке. Если ключа нет — скажи владельцу, не выдумывай обходных путей.
 
 ## Отчёт владельцу
 

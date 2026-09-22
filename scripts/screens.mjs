@@ -2,6 +2,7 @@
 /**
  * Песочница экранов — сборка мини-аппов сразу в формате нашего билдера.
  *
+ *   node scripts/screens.mjs login <ключ>
  *   node scripts/screens.mjs new <имя>
  *   node scripts/screens.mjs check <имя>
  *   node scripts/screens.mjs preview <имя>
@@ -14,6 +15,7 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const LAB = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -54,9 +56,39 @@ function cmdNew() {
   console.log(`\nДальше: node scripts/screens.mjs check ${name}`);
 }
 
-/** Адрес платформы и ключ. Ключ только из окружения — в репозиторий не кладём. */
+/**
+ * Ключ доступа к платформе.
+ *
+ * Хранится в домашней папке, а не в репозитории: файл проекта рано или поздно
+ * уезжает в git, и боевой ключ ко всем проектам уехал бы вместе с ним.
+ * Переменная окружения имеет приоритет — на сервере удобнее так.
+ */
 const API = (process.env.MINIAPP_URL || "https://miniapp.alterda.ru").replace(/\/+$/, "");
-const TOKEN = process.env.MINIAPP_ADMIN_TOKEN || "";
+const CRED_FILE = join(homedir(), ".miniapp-lab.json");
+
+function readToken() {
+  if (process.env.MINIAPP_ADMIN_TOKEN) return process.env.MINIAPP_ADMIN_TOKEN;
+  try {
+    return JSON.parse(readFileSync(CRED_FILE, "utf8")).token || "";
+  } catch {
+    return "";
+  }
+}
+const TOKEN = readToken();
+
+/** Разовый вход: ключ вводится с клавиатуры и больше не спрашивается. */
+function cmdLogin() {
+  const value = (process.argv[3] || "").trim();
+  if (!value) {
+    console.log("Вставьте ключ платформы (ADMIN_TOKEN из настроек мини-аппа):\n");
+    console.log("  node scripts/screens.mjs login ВАШ_КЛЮЧ\n");
+    console.log(`Он ляжет в ${CRED_FILE} и в репозиторий не попадёт.`);
+    process.exit(1);
+  }
+  writeFileSync(CRED_FILE, JSON.stringify({ token: value }, null, 2) + "\n", { mode: 0o600 });
+  console.log(`Ключ сохранён: ${CRED_FILE}`);
+  console.log("Проверьте: node scripts/screens.mjs check <имя>");
+}
 
 /**
  * Быстрые правила спеки, которые видно без парсера. Они ловят самое частое:
@@ -92,7 +124,7 @@ function lint(raw, file) {
  * Поэтому адресуем экраны именно так, иначе они лягут в первый попавшийся.
  */
 async function apiPost(path, body, projectId) {
-  if (!TOKEN) die("Нет MINIAPP_ADMIN_TOKEN — ключ доступа к платформе.\n  Задайте его в окружении и повторите.");
+  if (!TOKEN) die("Нет ключа платформы.\n  Выполните один раз: node scripts/screens.mjs login ВАШ_КЛЮЧ");
   const res = await fetch(`${API}${path}`, {
     method: "POST",
     headers: {
@@ -220,10 +252,11 @@ async function cmdPush() {
   console.log(`\nОткрыть: ${API}`);
 }
 
-const commands = { new: cmdNew, check: cmdCheck, preview: cmdPreview, push: cmdPush };
+const commands = { new: cmdNew, login: cmdLogin, check: cmdCheck, preview: cmdPreview, push: cmdPush };
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
+  node scripts/screens.mjs login <ключ>    разовый вход на платформу
   node scripts/screens.mjs new <имя>       создать из шаблона
   node scripts/screens.mjs check <имя>     проверить экраны
   node scripts/screens.mjs preview <имя>   посмотреть в браузере
