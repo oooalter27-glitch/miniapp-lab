@@ -54,7 +54,85 @@ function cmdNew() {
   console.log(`\nДальше: node scripts/screens.mjs check ${name}`);
 }
 
-const commands = { new: cmdNew };
+/** Адрес платформы и ключ. Ключ только из окружения — в репозиторий не кладём. */
+const API = (process.env.MINIAPP_URL || "https://miniapp.alterda.ru").replace(/\/+$/, "");
+const TOKEN = process.env.MINIAPP_ADMIN_TOKEN || "";
+
+/**
+ * Быстрые правила спеки, которые видно без парсера. Они ловят самое частое:
+ * агент по привычке пишет классы Tailwind или размеры в rem, и экран
+ * приезжает в кабинет голым.
+ */
+function lint(raw, file) {
+  const problems = [];
+  const add = (m) => problems.push(`${file}: ${m}`);
+  // Комментарии вырезаем: в них объясняются правила, и упомянутый там тег
+  // не должен считаться разметкой. Парсер платформы их тоже игнорирует.
+  const html = raw.replace(/<!--[\s\S]*?-->/g, "");
+
+  if (!/<section[\s>]/i.test(html)) add("нет корневого <section> — экран не распознается");
+  if (/\sclass=/i.test(html)) add("есть class= — стили только inline через style=");
+  if (/<(script|style|link|head)[\s>]/i.test(html)) add("есть script/style/link/head — запрещены");
+  if (/style="[^"]*\d(rem|em|%)/i.test(html)) add("размеры в rem/em/% — только px");
+  if (/```/.test(html)) add("markdown-обёртка ``` внутри файла");
+
+  // Ширина корня: 375 — единственная, под которую считается раскладка.
+  const root = html.match(/<section[^>]*style="([^"]*)"/i);
+  if (root && !/width\s*:\s*375/.test(root[1])) add("у корневого section ширина не 375");
+
+  const sections = (html.match(/<section[\s>]/gi) || []).length;
+  if (sections > 1) add(`${sections} корневых <section> в одном файле — по одному экрану на файл`);
+
+  return problems;
+}
+
+async function apiPost(path, body) {
+  if (!TOKEN) die("Нет MINIAPP_ADMIN_TOKEN — ключ доступа к платформе.\n  Задайте его в окружении и повторите.");
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+/** Все экраны проекта одним HTML: парсер платформы читает section подряд. */
+function joinScreens(n) {
+  return screenFiles(n).map(({ path }) => readFileSync(path, "utf8")).join("\n");
+}
+
+async function cmdCheck() {
+  if (!name) die("Укажите имя: node scripts/screens.mjs check my-app");
+  const files = screenFiles(name);
+
+  let problems = [];
+  for (const { file, path } of files) problems = problems.concat(lint(readFileSync(path, "utf8"), file));
+  if (problems.length) {
+    console.error("КРАСНО: разметка не по спеке\n");
+    for (const p of problems) console.error("  · " + p);
+    console.error("\nСпека: docs/SPEC.md");
+    process.exit(1);
+  }
+  console.log(`правила спеки: ок (${files.length} экранов)`);
+
+  // Вторая проверка — настоящим парсером платформы, без записи. Локальные
+  // правила видят не всё: вложенность, неизвестный data-craft и прочее
+  // вылезает только при разборе.
+  const r = await apiPost("/api/screens/import-html", { html: joinScreens(name), dry: true });
+  if (!r.ok) {
+    console.error(`\nКРАСНО: платформа отклонила (${r.status}): ${r.data?.error || "неизвестно"}`);
+    process.exit(1);
+  }
+  console.log("\nЗЕЛЕНО: экраны импортируются\n");
+  for (const s of r.data.screens) {
+    console.log(`  ${String(s.index + 1).padStart(2)}. ${s.name} — ${s.nodes} элементов` +
+      (s.aiAssets ? `, картинок в генерацию: ${s.aiAssets}` : ""));
+  }
+  console.log(`\nДальше: node scripts/screens.mjs push ${name}`);
+}
+
+const commands = { new: cmdNew, check: cmdCheck };
 const fn = commands[cmd];
 if (!fn) {
   console.log(`Команды:
@@ -64,4 +142,4 @@ if (!fn) {
   node scripts/screens.mjs push <имя>      отправить в билдер`);
   process.exit(cmd ? 1 : 0);
 }
-fn();
+await fn();
